@@ -1,13 +1,15 @@
 use std::{env, io};
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use app_state::AppState;
+use bb8_redis::{bb8, RedisConnectionManager};
 use dotenvy::dotenv;
 use sea_orm::Database;
 
 mod app_state;
 mod jwt;
 mod routes;
+mod structures;
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -28,18 +30,30 @@ async fn main() -> io::Result<()> {
         .await
         .expect("Unable to connect to Postgres database");
 
+    let redis_url = env::var("REDIS_URL").expect("No REDIS_URL found in .env file");
+    // Initialize the redis connection
+    let redis_manager =
+        RedisConnectionManager::new(redis_url).expect("Unable to connect to redis instance");
+    let redis_pool = bb8::Pool::builder()
+        .build(redis_manager)
+        .await
+        .expect("Unable to initialize redis pool");
+
     // Now, we can create the universal app state.
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::new("%a %r %D"))
             .app_data(web::Data::new(AppState {
                 db: db.clone(),
                 jwt_sec: jwt_secret.clone(),
                 jwt_iss: jwt_issuer.clone(),
                 jwt_aud: jwt_audience.clone(),
+                redis_pool: redis_pool.clone(),
             }))
             .service(routes::handle_root_path)
             .service(routes::auth::handle_google_login)
             .service(routes::auth::handle_verify_access_token)
+            .service(routes::colleges::hande_list_all_colleges)
     })
     .bind(("127.0.0.1", port))?
     .run()

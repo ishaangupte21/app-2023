@@ -19,5 +19,7 @@ sea-orm = { version = "0.12", features = [
 ] }
 qstring = "0.7.2"
 entities = { path = "./entities" }
-migration = {path = "./migration"}
+migration = { path = "./migration" }
 jsonwebtoken = "9.1.0"
+awc = { version = "3.2.0", features = ["openssl"] }
+bb8-redis = "0.13.1"
