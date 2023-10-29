@@ -1,9 +1,8 @@
 // Routes under the /auth path
 
-use actix_web::{get, post, web, HttpRequest, HttpResponse};
+use actix_web::{get, post, web, HttpResponse};
 use base64::{engine::general_purpose, Engine};
 use entities::user::{self, Entity as User};
-use qstring::QString;
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
@@ -187,17 +186,18 @@ pub struct VerifyTokenResp {
     claims: Option<AccessTokenClaims>,
 }
 
+#[derive(Deserialize)]
+pub struct VerifyTokenReqQuery {
+    token: Option<String>,
+}
+
 #[get("/auth/verify-access-token")]
 pub async fn handle_verify_access_token(
-    req: HttpRequest,
     state: web::Data<AppState>,
+    query: web::Query<VerifyTokenReqQuery>,
 ) -> HttpResponse {
-    // Parse the query params
-    let query_string = req.query_string();
-    let query_params = QString::from(query_string);
-
     // The "token" query param must be there.
-    let access_token = match query_params.get("token") {
+    let access_token = match &query.token {
         Some(token) => token,
         None => {
             return HttpResponse::Unauthorized().json(VerifyTokenResp { claims: None });

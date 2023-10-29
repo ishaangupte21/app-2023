@@ -39,6 +39,8 @@ async fn main() -> io::Result<()> {
         .await
         .expect("Unable to initialize redis pool");
 
+    let pos_stack_key = env::var("POS_STACK_KEY").expect("No POS_STACK_KEY in .env file");
+
     // Now, we can create the universal app state.
     HttpServer::new(move || {
         App::new()
@@ -49,11 +51,13 @@ async fn main() -> io::Result<()> {
                 jwt_iss: jwt_issuer.clone(),
                 jwt_aud: jwt_audience.clone(),
                 redis_pool: redis_pool.clone(),
+                pos_stack_key: pos_stack_key.clone(),
             }))
             .service(routes::handle_root_path)
             .service(routes::auth::handle_google_login)
             .service(routes::auth::handle_verify_access_token)
             .service(routes::colleges::hande_list_all_colleges)
+            .service(routes::colleges::handle_get_colleges_with_params)
     })
     .bind(("127.0.0.1", port))?
     .run()

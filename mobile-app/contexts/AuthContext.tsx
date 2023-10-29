@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 interface AuthProps {
   accessToken: string | null;
   isAuthenticated: boolean;
+  userData: User | null;
   login?: (googleToken: string) => Promise<void>;
   logout?: () => Promise<void>;
 }
@@ -12,21 +13,32 @@ interface AuthProps {
 const AuthContext = createContext<AuthProps>({
   accessToken: null,
   isAuthenticated: false,
+  userData: null,
 });
 
 export const useAuth = () => useContext(AuthContext);
 
+interface User {
+  id: number;
+  email: string;
+  name: string;
+  picture: string;
+}
+
 export default function AuthProvider({ children }: any) {
   const [isAuthenticated, setAuthenticated] = useState<boolean>(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [userData, setUserData] = useState<User | null>(null);
 
   const storeAccessToken = async (accessToken: string) => {
     await AsyncStorage.setItem("@auth/access-token", accessToken);
+    http.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
     setAccessToken(accessToken);
   };
 
   const removeAccessToken = async () => {
     await AsyncStorage.removeItem("@auth/access-token");
+    http.defaults.headers.common["Authorization"] = "";
     setAccessToken(null);
     setAuthenticated(false);
   };
@@ -39,12 +51,14 @@ export default function AuthProvider({ children }: any) {
     }
 
     const { data } = await http.get(
-      `/verify-access-token?token=${accessToken}`
+      `/auth/verify-access-token?token=${accessToken}`
     );
-    if (!data.valid_token) {
+
+    if (!data.claims) {
       await removeAccessToken();
     } else {
       setAccessToken(accessToken);
+      setUserData(data.claims);
       setAuthenticated(true);
     }
   };
@@ -54,6 +68,16 @@ export default function AuthProvider({ children }: any) {
       removeAccessToken();
     });
   }, []);
+
+  useEffect(() => {
+    console.log(isAuthenticated);
+    if (isAuthenticated) {
+      verifyAccessToken().catch((err) => {
+        console.error(err);
+        removeAccessToken();
+      });
+    }
+  }, [isAuthenticated]);
 
   const login = async (googleToken: string) => {
     const { data } = await http.post("/auth/google-login", {
@@ -71,6 +95,7 @@ export default function AuthProvider({ children }: any) {
       value={{
         accessToken,
         isAuthenticated,
+        userData,
         login,
         logout,
       }}

@@ -4,6 +4,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import AuthView from "./views/AuthView";
 import AuthProvider from "./contexts/AuthContext";
 import DashView from "./views/DashView";
+import DashHeader from "./components/DashHeader";
 
 const Stack = createStackNavigator();
 
@@ -16,7 +17,7 @@ export default function App() {
           <Stack.Screen
             name="DashView"
             component={DashView}
-            options={{ headerLeft: () => null }}
+            options={{header: () => null}}
           />
         </Stack.Navigator>
       </NavigationContainer>

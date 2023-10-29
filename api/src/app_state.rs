@@ -7,4 +7,5 @@ pub struct AppState {
     pub jwt_iss: String,
     pub jwt_aud: String,
     pub redis_pool: bb8::Pool<RedisConnectionManager>,
+    pub pos_stack_key: String
 }

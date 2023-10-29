@@ -17,7 +17,6 @@ sea-orm = { version = "0.12", features = [
     "macros",
     "with-uuid",
 ] }
-qstring = "0.7.2"
 entities = { path = "./entities" }
 migration = { path = "./migration" }
 jsonwebtoken = "9.1.0"
