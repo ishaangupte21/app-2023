@@ -75,8 +75,7 @@ async fn get_all_colleges(
     let awc_client = Client::default();
 
     // The first request will give us the total number of colleges.
-    let first_req_query = [("limit", 100), ("offset", 0)];
-    let (total_count, mut first_list)= match awc_client.get("https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/us-colleges-and-universities/records").query(&first_req_query).unwrap().send().await {
+    let (total_count, mut first_list)= match awc_client.get("https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/us-colleges-and-universities/records?where=naics_desc%20like%20%22COLLEGES%2C%20UNIVERSITIES%2C%20AND%20PROFESSIONAL%20SCHOOLS%22&limit=100&offset=0").send().await {
         Ok(mut response) => {
             let response_body = match response.body().await {
                 Ok(body) => body,
@@ -107,8 +106,7 @@ async fn get_all_colleges(
 
     // Now, we need to keep going until we have all of them.
     while all_colleges.len() < total_count {
-        let req_query = [("limit", 100), ("offset", offset)];
-        let mut resp = match awc_client.get("https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/us-colleges-and-universities/records").query(&req_query).unwrap().send().await {
+        let mut resp = match awc_client.get(format!("https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/us-colleges-and-universities/records?where=naics_desc%20like%20%22COLLEGES%2C%20UNIVERSITIES%2C%20AND%20PROFESSIONAL%20SCHOOLS%22&limit=100&offset={offset}")).send().await {
             Ok(mut response) => {
                 let response_body = match response.body().await {
                     Ok(body) => body,
