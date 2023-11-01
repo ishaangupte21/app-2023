@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import MyCollegesTab from "./MyCollegesTab";
 import DashHeader from "../components/DashHeader";
 import SearchColleges from "./SearchCollegesTab";
+import ChatView from "./ChatView";
 
 // Initialize a react query client to be used from here.
 const queryClient = new QueryClient();
@@ -18,6 +19,7 @@ export default function DashView() {
         <Tab.Navigator initialRouteName="MyColleges">
           <Tab.Screen name="MyColleges" component={MyCollegesTab} />
           <Tab.Screen name="SearchColleges" component={SearchColleges} />
+          <Tab.Screen name="Chat" component={ChatView} />
         </Tab.Navigator>
       </QueryClientProvider>
     </View>

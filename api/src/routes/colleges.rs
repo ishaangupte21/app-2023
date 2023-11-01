@@ -1,11 +1,12 @@
 // Routes under the /colleges path
 
-use std::f64::consts::PI;
+use std::{f64::consts::PI, time::Duration, str::FromStr};
 
 use actix_web::{get, web, HttpResponse};
 use awc::Client;
 use bb8_redis::{bb8, redis::cmd, RedisConnectionManager};
 use serde::{Deserialize, Serialize};
+use tl::ParserOptions;
 
 use crate::{
     app_state::AppState,
@@ -296,4 +297,279 @@ async fn get_geolocation_coords(location: &str, position_stack_key: &str) -> Opt
             None
         }
     }
+}
+
+#[derive(Serialize)]
+pub struct GetSingleCollegeRespWrapper<'a> {
+    college: Option<GetSingleCollegeResp>,
+    msg: Option<&'a str>,
+}
+
+impl GetSingleCollegeRespWrapper<'_> {
+    pub fn from_msg<'a>(msg: &'a str) -> GetSingleCollegeRespWrapper<'a> {
+        GetSingleCollegeRespWrapper {
+            msg: Some(msg),
+            college: None,
+        }
+    }
+
+    pub fn from_college_data<'a>(college: GetSingleCollegeResp) -> GetSingleCollegeRespWrapper<'a> {
+        GetSingleCollegeRespWrapper {
+            college: Some(college),
+            msg: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct GetSingleCollegeResp {
+    admissions_url: String,
+    apply_url: String,
+    finaid_url: String,
+    admission_info: CollegeAdmissionInfo,
+    application_reqs: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct CollegeAdmissionInfo {
+    total_applicants: String,
+    total_male_applicants: String,
+    total_female_applicants: String,
+    total_percent_admitted: String,
+    total_percent_males_admitted: String,
+    total_percent_females_admitted: String,
+    sat_avg_english: String,
+    sat_avg_math: String,
+    act_avg: String,
+}
+
+#[derive(Deserialize)]
+pub struct GetSingleCollegeQuery {
+    pub name: String,
+}
+
+#[get("/college/info/{ipedsid}")]
+pub async fn handle_get_single_college_info(
+    path: web::Path<String>,
+    query: web::Query<GetSingleCollegeQuery>,
+    data: web::Data<AppState>,
+) -> HttpResponse {
+    // If the cache is missed, we must first get the data.
+    let mut redis_conn = data.redis_pool.get().await.unwrap();
+    let redis_resp: Option<String> = cmd("GET")
+        .arg(format!("COLLEGE_DATA_{}", path))
+        .query_async(&mut *redis_conn)
+        .await
+        .unwrap();
+
+    if let Some(resp) = redis_resp {
+        let parsed = serde_json::from_str::<GetSingleCollegeResp>(&resp).unwrap();
+        return HttpResponse::Ok().json(GetSingleCollegeRespWrapper::from_college_data(parsed));
+    }
+
+    let awc_client = Client::default();
+    let req_query = [("id", path.as_str())];
+    let resp_contents = match awc_client
+        .get("https://nces.ed.gov/collegenavigator")
+        .query(&req_query)
+        .unwrap()
+        .send()
+        .await
+    {
+        Ok(mut resp) => match resp.body().await {
+            Ok(contents) => contents,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return HttpResponse::InternalServerError().json(
+                    GetSingleCollegeRespWrapper::from_msg("Unable to parse html response"),
+                );
+            }
+        },
+        Err(e) => {
+            eprintln!("error: {e}");
+            return HttpResponse::InternalServerError().json(
+                GetSingleCollegeRespWrapper::from_msg("Unable to fetch html data"),
+            );
+        }
+    };
+
+    let dom = match tl::parse(
+        unsafe { std::str::from_utf8_unchecked(&resp_contents) },
+        ParserOptions::default(),
+    ) {
+        Ok(dom) => dom,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return HttpResponse::InternalServerError().json(
+                GetSingleCollegeRespWrapper::from_msg("Unable to parse html data"),
+            );
+        }
+    };
+
+    let dom_parser = dom.parser();
+
+    let mut general_info_handle = match dom
+        .query_selector("div#divctl00_cphCollegeNavBody_ucInstitutionMain_dtpGeneral")
+    {
+        Some(el) => el,
+        None => {
+            return HttpResponse::InternalServerError().json(GetSingleCollegeRespWrapper::from_msg(
+                "Unable to get general info handle from html data",
+            ))
+        }
+    };
+
+    let children = general_info_handle
+        .next()
+        .unwrap()
+        .get(dom_parser)
+        .unwrap()
+        .children()
+        .unwrap()
+        .all(dom_parser);
+    //let (admissions_url, apply_url, finaid_url) = get_general_info_urls(general_info_handle, dom_parser);
+    let admissions_url = children[9].inner_html(dom_parser).to_string();
+    let apply_url = children[16].inner_html(dom_parser).to_string();
+    let finaid_url = children[24].inner_html(dom_parser).to_string();
+
+    let finaid_el_handle = match dom.get_element_by_id("finaid") {
+        Some(el) => el,
+        None => {
+            return HttpResponse::InternalServerError().json(GetSingleCollegeRespWrapper::from_msg(
+                "Unable to get finaid handle from html data",
+            ))
+        }
+    };
+
+    let finaid_el = match finaid_el_handle.get(dom_parser) {
+        Some(el) => el,
+        None => {
+            return HttpResponse::InternalServerError().json(GetSingleCollegeRespWrapper::from_msg(
+                "Unable to get finaid from html data",
+            ))
+        }
+    };
+
+    let admissions_el_handle = match dom
+        .get_element_by_id("divctl00_cphCollegeNavBody_ucInstitutionMain_ctl04")
+    {
+        Some(el) => el,
+        None => {
+            return HttpResponse::InternalServerError().json(GetSingleCollegeRespWrapper::from_msg(
+                "Unable to get applications handle from html data",
+            ))
+        }
+    };
+
+    let applications_el = match admissions_el_handle.get(dom_parser) {
+        Some(el) => el,
+        None => {
+            return HttpResponse::InternalServerError().json(GetSingleCollegeRespWrapper::from_msg(
+                "Unable to get applications from html data",
+            ))
+        }
+    };
+
+    let admissions_html = applications_el
+        .inner_html(dom_parser)
+        .to_string()
+        .replace("\"", "\\\"");
+    let admissions_body_req = serde_json::json!({
+        "input": admissions_html,
+    });
+    let mut get_admissions_data_request = awc_client
+        .post("http://localhost:8001/get-application-statistics")
+        .timeout(Duration::from_secs(30))
+        .send_json(&admissions_body_req)
+        .await
+        .unwrap();
+
+    let get_admissions_response_body = get_admissions_data_request.body().await.unwrap();
+
+    let college_admission_info =
+        serde_json::from_slice::<CollegeAdmissionInfo>(&get_admissions_response_body).unwrap();
+
+    let reqs_body_req = serde_json::json!({
+        "name": query.name
+    });
+
+    let mut get_req_data_req = awc_client
+        .post("http://localhost:8001/get-application-requirements")
+        .timeout(Duration::from_secs(30))
+        .send_json(&reqs_body_req)
+        .await
+        .unwrap();
+
+    let get_req_data_body = get_req_data_req.body().await.unwrap();
+
+    let college_reqs = serde_json::from_slice::<Vec<String>>(&get_req_data_body).unwrap();
+
+    let resp = GetSingleCollegeResp {
+        admissions_url,
+        apply_url,
+        finaid_url,
+        admission_info: college_admission_info,
+        application_reqs: college_reqs,
+    };
+
+    // Cache it.
+    let _result: Option<String> = cmd("SET")
+        .arg(format!("COLLEGE_DATA_{}", path))
+        .arg(serde_json::to_string(&resp).unwrap())
+        .arg("EX")
+        .arg(COLLEGE_LIST_EXP)
+        .query_async(&mut *redis_conn)
+        .await
+        .unwrap();
+    HttpResponse::Ok().json(GetSingleCollegeRespWrapper::from_college_data(resp))
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct HowReviewedResp {
+    how_reviewed: String,
+}
+
+#[get("/colleges/how-reviewed")]
+pub async fn handle_how_reviewed_route(
+    query: web::Query<GetSingleCollegeQuery>,
+    data: web::Data<AppState>,
+) -> HttpResponse {
+    let mut redis_conn = data.redis_pool.get().await.unwrap();
+    let redis_resp: Option<String> = cmd("GET")
+        .arg(format!("COLLEGE_REVIEWED_NAME_{}", query.name))
+        .query_async(&mut *redis_conn)
+        .await
+        .unwrap();
+
+    if let Some(resp) = redis_resp {
+        let parsed = serde_json::from_str::<HowReviewedResp>(&resp).unwrap();
+        return HttpResponse::Ok().json(parsed);
+    }
+
+    let mut how_reviewed_req = serde_json::json!({
+        "name": query.name
+    });
+
+    let how_reviewed_req = Client::default()
+        .post("http://localhost:8001/get-how-reviewed")
+        .timeout(Duration::from_secs(30))
+        .send_json(&how_reviewed_req)
+        .await
+        .unwrap()
+        .body()
+        .await
+        .unwrap();
+
+        let parsed_resp = HowReviewedResp {how_reviewed: String::from_str(unsafe {std::str::from_utf8_unchecked(&how_reviewed_req)}).unwrap()};
+
+    let _result: Option<String> = cmd("SET")
+        .arg(format!("COLLEGE_REVIEWED_NAME_{}", query.name))
+        .arg(serde_json::to_string(&parsed_resp).unwrap())
+        .arg("EX")
+        .arg(COLLEGE_LIST_EXP)
+        .query_async(&mut *redis_conn)
+        .await
+        .unwrap();
+
+    HttpResponse::Ok().json(parsed_resp)
 }

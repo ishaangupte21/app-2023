@@ -58,6 +58,8 @@ async fn main() -> io::Result<()> {
             .service(routes::auth::handle_verify_access_token)
             .service(routes::colleges::hande_list_all_colleges)
             .service(routes::colleges::handle_get_colleges_with_params)
+            .service(routes::colleges::handle_get_single_college_info)
+            .service(routes::colleges::handle_how_reviewed_route)
     })
     .bind(("127.0.0.1", port))?
     .run()

@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   Button,
   Card,
+  Colors,
   NumberInput,
   NumberInputData,
   Text,
@@ -12,12 +13,18 @@ import {
 import http from "../http";
 import MapViewModal from "../components/MapViewModal";
 import { ScrollView } from "react-native-gesture-handler";
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faMap, faPlus } from "@fortawesome/free-solid-svg-icons";
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
 
 export default function SearchColleges() {
   const [showSearchResults, setShowSearchResults] = useState<boolean>(false);
   const [searchResults, setSearchResults] = useState<College[]>([]);
   const [collegeOnMap, setCollegeOnMap] = useState<College | null>(null);
   const [showMapModal, setShowMapModal] = useState<boolean>(false);
+
+  const navigation = useNavigation<StackNavigationProp<any>>();
 
   const handleFormSubmit = async (values: any) => {
     const { data } = await http.get("/colleges/with-params", {
@@ -40,7 +47,7 @@ export default function SearchColleges() {
       }}
     >
       <View>
-        <Button label="Go Back" onPress={() => setShowSearchResults(false)} />
+        <Button borderRadius={8} backgroundColor={Colors.red40} label="Go Back" onPress={() => setShowSearchResults(false)} />
       </View>
       {searchResults.map((college) => (
         <Card
@@ -53,14 +60,48 @@ export default function SearchColleges() {
           <Text text80>
             {college.address} {college.city}, {college.state} {college.zip}
           </Text>
-          <Button
-            label="View on Map"
-            style={{ marginTop: 8 }}
-            onPress={() => {
+          <View style={{ display: "flex", flexDirection: "row", justifyContent: "space-evenly", marginTop: 20}}>
+            <Button
+              iconSource={() => (
+                <FontAwesomeIcon icon={faMap} color="white" size={28} />
+              )}
+              style={{
+                marginTop: 8,
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+              }}
+              backgroundColor={Colors.blue40}
+              borderRadius={10}
+              onPress={() => {
                 setCollegeOnMap(college);
                 setShowMapModal(true);
-            }}
-          />
+              }}
+            />
+            <Button
+              iconSource={() => (
+                <FontAwesomeIcon color="white" size={28} icon={faPlus} />
+              )}
+              backgroundColor={Colors.green40}
+              borderRadius={10}
+              style={{
+                marginTop: 8,
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+              }}
+            />
+
+            <Button
+              label="More"
+              onPress={() =>
+                navigation.push("CollegeInfoView", {
+                  college,
+                })
+              }
+
+              borderRadius={10}
+              backgroundColor={Colors.orange30}
+            />
+          </View>
         </Card>
       ))}
 
@@ -79,60 +120,72 @@ export default function SearchColleges() {
         paddingHorizontal: 10,
       }}
     >
-      <Text style={{ margin: "auto" }} text50M>
-        Search for Colleges
-      </Text>
-      <Formik
-        initialValues={{
-          name: "",
-          maxDistance: { userInput: "50" },
-          startingPoint: "",
-        }}
-        onSubmit={(values) => handleFormSubmit(values)}
-      >
-        {({
-          handleChange,
-          handleBlur,
-          handleSubmit,
-          values,
-          setFieldValue,
-        }) => (
-          <View style={{ margin: "auto" }}>
-            <TextField
-              placeholder="Name"
-              floatingPlaceholder
-              onChangeText={handleChange("name")}
-              onBlur={handleBlur("name")}
-              value={values.name}
-            />
-
-            <View style={{ display: "flex" }}>
-              <Text>Within </Text>
-              <NumberInput
-                initialNumber={50}
-                fractionDigits={0}
-                onChangeNumber={(data: NumberInputData) =>
-                  (values.maxDistance = data)
-                }
-              />
-              <Text> miles from </Text>
+      <Card style={{ padding: 20, marginTop: 25 }}>
+        <Text style={{ marginLeft: 65, marginTop: 20 }} text40M>
+          Search for Colleges
+        </Text>
+        <Formik
+          initialValues={{
+            name: "",
+            maxDistance: { userInput: "50" },
+            startingPoint: "",
+          }}
+          onSubmit={(values) => handleFormSubmit(values)}
+        >
+          {({
+            handleChange,
+            handleBlur,
+            handleSubmit,
+            values,
+            setFieldValue,
+          }) => (
+            <View style={{ margin: "auto" }}>
               <TextField
-                placeholder="Starting Point"
+                placeholder="Name"
                 floatingPlaceholder
-                onChangeText={handleChange("startingPoint")}
-                onBlur={handleBlur("startingPoint")}
-                value={values.startingPoint}
+                onChangeText={handleChange("name")}
+                onBlur={handleBlur("name")}
+                value={values.name}
+                text70L
+              />
+
+              <View style={{ display: "flex" }}>
+                <Text text70M style={{ marginTop: 8 }}>
+                  Within{" "}
+                </Text>
+                <NumberInput
+                  initialNumber={50}
+                  fractionDigits={0}
+                  onChangeNumber={(data: NumberInputData) =>
+                    (values.maxDistance = data)
+                  }
+                />
+                <Text text70M style={{ marginTop: 8 }}>
+                  {" "}
+                  Miles From{" "}
+                </Text>
+                <TextField
+                  placeholder="Starting Point"
+                  floatingPlaceholder
+                  onChangeText={handleChange("startingPoint")}
+                  onBlur={handleBlur("startingPoint")}
+                  value={values.startingPoint}
+                  text70L
+                />
+              </View>
+
+              <Button
+                label="Search"
+                style={{ width: "75%", marginTop: 20, marginLeft: 50 }}
+                onPress={() => handleSubmit()}
+                borderRadius={8}
+                text70M
+                backgroundColor={Colors.blue30}
               />
             </View>
-
-            <Button
-              label="Search"
-              style={{ width: "75%", marginTop: 10 }}
-              onPress={() => handleSubmit()}
-            />
-          </View>
-        )}
-      </Formik>
+          )}
+        </Formik>
+      </Card>
     </View>
   );
 }

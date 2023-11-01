@@ -50,6 +50,7 @@ export default function MapViewModal({
             }}
             title={college.name}
             description={college.naics_desc}
+            key={college.name}
           />
         </MapView>
       </Modal>
